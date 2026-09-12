@@ -27,6 +27,7 @@ from .collision import (
 from .defold_formats import (
     make_model_text_multi,
     make_go_ref_model_text,
+    make_go_components_text,
     make_collection_text_grouped_embedded,
 )
 
@@ -72,6 +73,12 @@ def to_defold_trs(obj):
     return (loc.x, loc.y, loc.z), (rot.x, rot.y, rot.z, rot.w), (scl.x, scl.y, scl.z)
 
 
+def prototype_id_of(obj) -> str:
+    """`defold_prototype` custom property, or the object name for parts of prototype collections."""
+    proto_raw = get_prop(obj, "defold_prototype")
+    return sanitize_id(proto_raw if proto_raw else obj.name)
+
+
 def _make_baked_texture_filename(proto: str, mat_name: str) -> str:
     # Stable filename, always PNG
     return f"{proto}__{sanitize_id(mat_name)}_albedo.png"
@@ -92,12 +99,29 @@ def _material_prop_int(mat, key: str, default: int) -> int:
         return default
 
 
-def export_single_prototype_assets(context, obj) -> str:
+def _export_glb_at_origin(context, obj, abs_glb: str):
+    """
+    Blender's glTF exporter bakes the object's world transform into the GLB node and Defold
+    applies glTF node transforms, so a placed instance would be offset twice. The mesh is
+    exported with an identity transform and the transform is restored afterwards.
+    """
+    world = obj.matrix_world.copy()
+    obj.matrix_world = Matrix.Identity(4)
+    context.view_layer.update()
+    try:
+        select_only(obj)
+        export_glb_selected(abs_glb)
+    finally:
+        obj.matrix_world = world
+        context.view_layer.update()
+
+
+def export_single_prototype_assets(context, obj, overwrite_go: bool = False) -> str:
     """
     Export assets for ONE prototype:
-      - <proto>.glb
+      - <proto>.glb (mesh at the origin)
       - <proto>.model
-      - create <proto>.go once (never overwritten)
+      - <proto>.go: created once, never overwritten (unless overwrite_go)
       - optional collision: <proto>.convexshape + <proto>.collisionobject (overwritten)
       - optional bake: per-material PNGs (overwritten)
     Returns: proto id (sanitized)
@@ -110,10 +134,7 @@ def export_single_prototype_assets(context, obj) -> str:
     if not obj or obj.type != "MESH":
         raise RuntimeError("Active object is not a MESH.")
 
-    proto_raw = get_prop(obj, "defold_prototype")
-    if not proto_raw:
-        raise RuntimeError("Active object has no 'defold_prototype' custom property.")
-    proto = sanitize_id(proto_raw)
+    proto = prototype_id_of(obj)
 
     # absolute dirs
     abs_models = os.path.join(project_root, s.models_dir)
@@ -155,9 +176,7 @@ def export_single_prototype_assets(context, obj) -> str:
     safe_remove_file(os.path.join(abs_collisions, f"{proto}.convexshape"))
     safe_remove_file(os.path.join(abs_collisions, f"{proto}.collisionobject"))
 
-    # export GLB from selection
-    select_only(obj)
-    export_glb_selected(abs_glb)
+    _export_glb_at_origin(context, obj, abs_glb)
 
     # build .model material blocks
     blocks = []
@@ -207,7 +226,7 @@ def export_single_prototype_assets(context, obj) -> str:
     # write .model
     write_text_file(abs_model, make_model_text_multi(glb_project_path, proto, blocks))
 
-    # optional collision
+    # optional collision (hull points are taken at the origin as well)
     collisionobject_project_path = None
     if has_defold_collision(obj):
         group = get_collision_group(obj)
@@ -219,15 +238,87 @@ def export_single_prototype_assets(context, obj) -> str:
         convex_project_path = f"/{s.collisions_dir}/{proto}.convexshape".replace("\\", "/")
         colobj_project_path = f"/{s.collisions_dir}/{proto}.collisionobject".replace("\\", "/")
 
-        export_convex_hull_points(obj, abs_convex)
+        world = obj.matrix_world.copy()
+        obj.matrix_world = Matrix.Identity(4)
+        context.view_layer.update()
+        try:
+            export_convex_hull_points(obj, abs_convex)
+        finally:
+            obj.matrix_world = world
+            context.view_layer.update()
         write_text_file(abs_colobj, make_collisionobject_text(convex_project_path, group, mask))
         collisionobject_project_path = colobj_project_path
 
     # create .go ONCE (do not overwrite to preserve manual edits like collision/logic added in Defold)
-    if not os.path.isfile(abs_go):
+    if overwrite_go or not os.path.isfile(abs_go):
         write_text_file(abs_go, make_go_ref_model_text(model_project_path, collisionobject_project_path))
 
     return proto
+
+
+# ------------------------------------------------------------
+# Prototype collections (collection instances)
+# ------------------------------------------------------------
+def collection_parts(collection):
+    """MESH objects directly inside a prototype collection."""
+    return [o for o in collection.objects if o.type == "MESH"]
+
+
+def export_prototype_collection(context, name: str, collection) -> str:
+    """
+    A collection instanced through Empties (Instance Collection) is a prototype made of parts:
+    every MESH part is exported as a Reforge prototype of its own (glb/model/collision), then
+    <name>.go is written with a model component per part and a collision component per collider
+    part, keeping the part's position and rotation inside the collection. Scale of a part must be
+    applied. The .go of a prototype collection is derived data and is rewritten on every export;
+    the per-part .go files are removed.
+    Returns: prototype id (sanitized collection name)
+    """
+    s = context.scene.reforge_settings
+    parts = collection_parts(collection)
+    if not parts:
+        raise RuntimeError(f"Prototype collection '{collection.name}' has no MESH parts.")
+
+    components = []
+    for part in parts:
+        pos, quat, scale = to_defold_trs(part)
+        if any(abs(v - 1.0) > 1e-6 for v in scale):
+            raise RuntimeError(f"'{collection.name}/{part.name}': apply the scale of prototype parts (Ctrl+A > Scale).")
+        part_id = export_single_prototype_assets(context, part, overwrite_go=True)
+        components.append((part_id, f"/{s.models_dir}/{part_id}.model".replace("\\", "/"), pos, quat))
+        if has_defold_collision(part):
+            components.append((f"{part_id}_collision", f"/{s.collisions_dir}/{part_id}.collisionobject".replace("\\", "/"), pos, quat))
+        if part_id != name:
+            safe_remove_file(os.path.join(s.project_root, s.prefabs_dir, f"{part_id}.go"))
+
+    abs_go = os.path.join(s.project_root, s.prefabs_dir, f"{name}.go")
+    write_text_file(abs_go, make_go_components_text(components))
+    return name
+
+
+def collect_export_groups(context):
+    """
+    Returns (collection_groups, mesh_groups):
+      collection_groups: proto id -> (collection, [instance Empties])
+      mesh_groups:       proto id -> [MESH objects with defold_prototype]
+    Both respect `export_visible_only` for the instances/objects placed in the scene; the parts
+    of a prototype collection are exported even when the collection itself is hidden.
+    """
+    s = context.scene.reforge_settings
+    view_layer = context.view_layer
+    collection_groups = {}
+    mesh_groups = {}
+    for obj in context.scene.objects:
+        if s.export_visible_only and not is_object_visible(obj, view_layer):
+            continue
+        if obj.instance_type == "COLLECTION" and obj.instance_collection is not None:
+            proto = sanitize_id(obj.instance_collection.name)
+            collection_groups.setdefault(proto, (obj.instance_collection, []))[1].append(obj)
+        elif obj.type == "MESH" and get_prop(obj, "defold_prototype"):
+            mesh_groups.setdefault(prototype_id_of(obj), []).append(obj)
+    if not collection_groups and not mesh_groups:
+        raise RuntimeError("Nothing to export: no collection instances and no MESH objects with 'defold_prototype' (with current visibility filter).")
+    return collection_groups, mesh_groups
 
 
 def export_all_prototypes_assets_no_scene(context) -> int:
@@ -235,28 +326,14 @@ def export_all_prototypes_assets_no_scene(context) -> int:
     Export assets (.glb/.model/optional collisions/bake) for all prototypes in scene.
     Does NOT regenerate .collection.
     """
-    s = context.scene.reforge_settings
-    view_layer = context.view_layer
-
-    groups = {}
-    for obj in context.scene.objects:
-        if obj.type != "MESH":
-            continue
-        if s.export_visible_only and not is_object_visible(obj, view_layer):
-            continue
-        proto = get_prop(obj, "defold_prototype")
-        if not proto:
-            continue
-        proto = sanitize_id(proto)
-        groups.setdefault(proto, []).append(obj)
-
-    if not groups:
-        raise RuntimeError("No MESH objects with 'defold_prototype' found (with current visibility filter).")
-
+    collection_groups, mesh_groups = collect_export_groups(context)
     n = 0
-    for proto in sorted(groups.keys()):
+    for proto in sorted(collection_groups.keys()):
+        export_prototype_collection(context, proto, collection_groups[proto][0])
+        n += 1
+    for proto in sorted(mesh_groups.keys()):
         # export only "etalon" mesh for this proto
-        export_single_prototype_assets(context, groups[proto][0])
+        export_single_prototype_assets(context, mesh_groups[proto][0])
         n += 1
     return n
 
@@ -264,7 +341,7 @@ def export_all_prototypes_assets_no_scene(context) -> int:
 def run_export_scene(context) -> str:
     """
     Full pipeline:
-      - export assets for each prototype (etalon)
+      - export assets for each prototype (collection prototypes and etalon meshes)
       - generate <collection_name>.collection with grouped embedded instances:
             root
               ├─ <protoA> -> children instances
@@ -280,47 +357,31 @@ def run_export_scene(context) -> str:
     abs_scenes = os.path.join(project_root, s.scenes_dir)
     ensure_dir(abs_scenes)
 
-    # group objects by prototype
-    groups = {}
-    view_layer = context.view_layer
-    for obj in context.scene.objects:
-        if obj.type != "MESH":
-            continue
-        if s.export_visible_only and not is_object_visible(obj, view_layer):
-            continue
-        proto = get_prop(obj, "defold_prototype")
-        if not proto:
-            continue
-        proto = sanitize_id(proto)
-        groups.setdefault(proto, []).append(obj)
+    collection_groups, mesh_groups = collect_export_groups(context)
 
-    if not groups:
-        raise RuntimeError("No MESH objects with 'defold_prototype' found (with current visibility filter).")
-
-    # ensure all prototypes are exported; create .go once
-    proto_to_go = {}
-    for proto, objs in groups.items():
+    placed = {}
+    for proto, (collection, empties) in collection_groups.items():
+        export_prototype_collection(context, proto, collection)
+        placed[proto] = empties
+    for proto, objs in mesh_groups.items():
         export_single_prototype_assets(context, objs[0])
-        proto_to_go[proto] = f"/{s.prefabs_dir}/{proto}.go".replace("\\", "/")
+        placed[proto] = objs
 
     # create instance list per proto
     instances_by_proto = {}
-    counters = {p: 0 for p in groups.keys()}
-
-    for proto, objs in groups.items():
-        for obj in objs:
-            counters[proto] += 1
-            inst_id = f"{proto}_{counters[proto]:03d}"
+    for proto, objs in placed.items():
+        go_path = f"/{s.prefabs_dir}/{proto}.go".replace("\\", "/")
+        for index, obj in enumerate(objs, start=1):
             pos, quat, scale = to_defold_trs(obj)
             instances_by_proto.setdefault(proto, []).append({
-                "id": inst_id,
-                "prototype": proto_to_go[proto],
+                "id": f"{proto}_{index:03d}",
+                "prototype": go_path,
                 "pos": pos,
                 "quat": quat,
                 "scale": scale,
             })
 
-    protos_sorted = sorted(groups.keys())
+    protos_sorted = sorted(placed.keys())
     collection_text = make_collection_text_grouped_embedded(
         s.collection_name,
         protos_sorted,

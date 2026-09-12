@@ -31,6 +31,7 @@ class REFORGE_PT_panel(bpy.types.Panel):
             col.prop(s, "default_material")
             col.separator()
             col.operator("reforge.generate", icon="EXPORT")
+            col.label(text="Collection instances export as one .go per collection.")
 
         box = layout.box()
         if draw_foldout_header(box, s, "show_quick_export"):

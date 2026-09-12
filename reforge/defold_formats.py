@@ -35,6 +35,30 @@ components {{
 }}
 '''
 
+def _vector_block(name: str, values, identity) -> str:
+    if all(abs(v - i) <= 1e-9 for v, i in zip(values, identity)):
+        return ""
+    labels = "xyzw"
+    lines = [f"  {name} {{\n"] + [f"    {labels[i]}: {v:.6f}\n" for i, v in enumerate(values)] + ["  }\n"]
+    return "".join(lines)
+
+
+def make_go_components_text(components) -> str:
+    """
+    components: list of (id, component project path, pos (x,y,z), quat (x,y,z,w)).
+    Position / rotation blocks are omitted when they are identity.
+    """
+    parts = []
+    for comp_id, comp_path, pos, quat in components:
+        parts.append("components {\n")
+        parts.append(f'  id: "{comp_id}"\n')
+        parts.append(f'  component: "{comp_path}"\n')
+        parts.append(_vector_block("position", pos, (0.0, 0.0, 0.0)))
+        parts.append(_vector_block("rotation", quat, (0.0, 0.0, 0.0, 1.0)))
+        parts.append("}\n")
+    return "".join(parts)
+
+
 def make_collection_text_grouped_embedded(collection_name: str, protos_sorted: list, instances_by_proto: dict) -> str:
     parts = [f'name: "{collection_name}"\n']
 

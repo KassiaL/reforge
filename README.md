@@ -3,6 +3,12 @@
 
 # Reforge - Defold Scene Exporter (Blender Add-on)
 
+> **Fork** ([KassiaL/reforge](https://github.com/KassiaL/reforge)) of [ufgo/reforge](https://github.com/ufgo/reforge), version 0.5.3:
+> - meshes are exported at the origin (upstream baked the first instance's world transform into the GLB, Defold applied it a second time);
+> - hidden selected objects are no longer exported together with a prototype;
+> - **collection instances**: an Empty with Instance Collection is an instance of that collection; every MESH inside the collection becomes a part and the collection becomes one `.go` with all model and collision components (prefab / component workflow). See `FORK.md`.
+
+
 Blender add-on for exporting scenes into a Defold project as:
 - `.glb` meshes
 - `.model` files (supports **multiple materials**)

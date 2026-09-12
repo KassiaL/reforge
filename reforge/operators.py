@@ -4,6 +4,7 @@ import re
 from .export_core import (
     run_export_scene,
     export_single_prototype_assets,
+    export_prototype_collection,
     export_all_prototypes_assets_no_scene,
 )
 from .materials import ensure_material_props
@@ -166,7 +167,7 @@ class REFORGE_OT_generate(bpy.types.Operator):
 
 
 class REFORGE_OT_export_selected_prototype(bpy.types.Operator):
-    """Export only the active object's prototype assets (GLB + .model + optional collision), without regenerating the scene."""
+    """Export only the active object's prototype assets (GLB + .model + optional collision), without regenerating the scene. For a collection instance, exports the whole prototype collection."""
     bl_idname = "reforge.export_selected_prototype"
     bl_label = "Export Selected Prototype (No Scene)"
     bl_options = {'REGISTER', 'UNDO'}
@@ -176,7 +177,10 @@ class REFORGE_OT_export_selected_prototype(bpy.types.Operator):
             obj = context.active_object
             if not obj:
                 raise RuntimeError("No active object selected.")
-            proto = export_single_prototype_assets(context, obj)
+            if obj.instance_type == "COLLECTION" and obj.instance_collection is not None:
+                proto = export_prototype_collection(context, sanitize_id(obj.instance_collection.name), obj.instance_collection)
+            else:
+                proto = export_single_prototype_assets(context, obj)
             self.report({'INFO'}, f"Exported prototype: {proto}")
             return {'FINISHED'}
         except Exception as e:

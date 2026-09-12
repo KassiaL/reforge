@@ -20,8 +20,15 @@ def sanitize_id(s: str) -> str:
     s = "".join(ch for ch in s if ch.isalnum() or ch in "_-")
     return s or "prototype"
 
+def deselect_all(view_layer=None):
+    # bpy.ops.object.select_all skips hidden objects, and hidden objects keep their selection:
+    # the glTF exporter (use_selection) would export them together with the prototype.
+    view_layer = view_layer or bpy.context.view_layer
+    for o in view_layer.objects:
+        o.select_set(False)
+
 def select_only(obj):
-    bpy.ops.object.select_all(action='DESELECT')
+    deselect_all()
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
 

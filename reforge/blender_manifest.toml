@@ -2,7 +2,7 @@ schema_version = "1.0.0"
 
 id = "reforge"
 name = "Reforge"
-version = "0.5.2"
+version = "0.5.3"
 
 tagline = "Reforge Blender scenes into Defold assets"
 
@@ -16,4 +16,4 @@ license = [
 
 blender_version_min = "4.2.0"
 
-website = "https://github.com/ufgo/defold-export-for-blender"
+website = "https://github.com/KassiaL/reforge"
