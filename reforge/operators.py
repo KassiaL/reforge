@@ -11,7 +11,7 @@ from .materials import ensure_material_props
 from .utils import is_object_visible, sanitize_id
 
 # Keys to clear (exporter-created)
-OBJECT_EXPORT_KEYS = ("defold_prototype", "defold_collision", "collision_group", "collision_mask")
+OBJECT_EXPORT_KEYS = ("defold_prototype", "defold_collision", "defold_collision_only", "collision_group", "collision_mask")
 MATERIAL_EXPORT_KEYS = (
     "defold_material",
     "defold_texture",

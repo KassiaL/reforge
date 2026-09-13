@@ -6,6 +6,7 @@
 > **Fork** ([KassiaL/reforge](https://github.com/KassiaL/reforge)) of [ufgo/reforge](https://github.com/ufgo/reforge), version 0.5.3:
 > - meshes are exported at the origin (upstream baked the first instance's world transform into the GLB, Defold applied it a second time);
 > - hidden selected objects are no longer exported together with a prototype;
+> - `defold_collision_only` object property: collider meshes without a model;
 > - **collection instances**: an Empty with Instance Collection is an instance of that collection; every MESH inside the collection becomes a part and the collection becomes one `.go` with all model and collision components (prefab / component workflow). See `FORK.md`.
 
 

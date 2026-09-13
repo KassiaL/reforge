@@ -46,6 +46,7 @@ ln -s ~/defold_projects/reforge/reforge ~/.config/blender/5.2/extensions/user_de
 
 - Object custom properties: `defold_prototype` (objects sharing a value are instances of one
   prototype; the first one is the "etalon" whose mesh is exported), `defold_collision` (bool),
+  `defold_collision_only` (bool, fork),
   `collision_group`, `collision_mask`. Object-level `defold_material` / `defold_texture` override
   the material ones.
 - Material custom properties: `defold_material` (Defold `.material` path written into `.model`),
@@ -77,7 +78,12 @@ ln -s ~/defold_projects/reforge/reforge ~/.config/blender/5.2/extensions/user_de
    "asset library" setup: hide the collection, place instances). `export_visible_only` applies
    to the placed Empties. Nested collection instances inside a prototype are not expanded.
    Export Selected Prototype accepts a collection instance.
-4. `export_single_prototype_assets(context, obj, overwrite_go=False)`; `prototype_id_of`,
+4. **`defold_collision_only`** object property: the mesh is a collider shape only, no GLB /
+   `.model` is written, the `.go` (or the part's components) gets the collision object alone.
+   Used for invisible collider meshes (a cylinder for a tree trunk) and for the ground chunks of
+   3d_demo: 388 chunk meshes in one prototype collection give one `ground.go` with 388
+   collision components and no models.
+5. `export_single_prototype_assets(context, obj, overwrite_go=False)`; `prototype_id_of`,
    `collect_export_groups`, `export_prototype_collection` are the new entry points.
    `defold_formats.make_go_components_text` writes multi-component `.go` files.
 

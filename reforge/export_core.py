@@ -42,8 +42,13 @@ AXIS_CONVERT = Matrix((
 ))
 
 
+def is_collision_only(obj) -> bool:
+    """`defold_collision_only`: the mesh is a collider shape, no GLB / .model is written."""
+    return bool(get_prop(obj, "defold_collision_only"))
+
+
 def has_defold_collision(obj) -> bool:
-    return bool(get_prop(obj, "defold_collision"))
+    return bool(get_prop(obj, "defold_collision")) or is_collision_only(obj)
 
 
 def get_collision_group(obj) -> str:
@@ -124,6 +129,7 @@ def export_single_prototype_assets(context, obj, overwrite_go: bool = False) -> 
       - <proto>.go: created once, never overwritten (unless overwrite_go)
       - optional collision: <proto>.convexshape + <proto>.collisionobject (overwritten)
       - optional bake: per-material PNGs (overwritten)
+    With `defold_collision_only` only the collision files and a collision-only .go are written.
     Returns: proto id (sanitized)
     """
     s = context.scene.reforge_settings
@@ -135,6 +141,7 @@ def export_single_prototype_assets(context, obj, overwrite_go: bool = False) -> 
         raise RuntimeError("Active object is not a MESH.")
 
     proto = prototype_id_of(obj)
+    collision_only = is_collision_only(obj)
 
     # absolute dirs
     abs_models = os.path.join(project_root, s.models_dir)
@@ -176,12 +183,12 @@ def export_single_prototype_assets(context, obj, overwrite_go: bool = False) -> 
     safe_remove_file(os.path.join(abs_collisions, f"{proto}.convexshape"))
     safe_remove_file(os.path.join(abs_collisions, f"{proto}.collisionobject"))
 
-    _export_glb_at_origin(context, obj, abs_glb)
-
     # build .model material blocks
     blocks = []
 
-    if materials:
+    if collision_only:
+        pass
+    elif materials:
         for mat in materials:
             mat_name, defold_mat_path, defold_tex_path = resolve_defold_material_and_texture_for_material(
                 settings=s,
@@ -223,8 +230,9 @@ def export_single_prototype_assets(context, obj, overwrite_go: bool = False) -> 
         )
         blocks.append((mat_name, defold_mat_path, defold_tex_path))
 
-    # write .model
-    write_text_file(abs_model, make_model_text_multi(glb_project_path, proto, blocks))
+    if not collision_only:
+        _export_glb_at_origin(context, obj, abs_glb)
+        write_text_file(abs_model, make_model_text_multi(glb_project_path, proto, blocks))
 
     # optional collision (hull points are taken at the origin as well)
     collisionobject_project_path = None
@@ -251,7 +259,10 @@ def export_single_prototype_assets(context, obj, overwrite_go: bool = False) -> 
 
     # create .go ONCE (do not overwrite to preserve manual edits like collision/logic added in Defold)
     if overwrite_go or not os.path.isfile(abs_go):
-        write_text_file(abs_go, make_go_ref_model_text(model_project_path, collisionobject_project_path))
+        if collision_only:
+            write_text_file(abs_go, make_go_components_text([("collision", collisionobject_project_path, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0))]))
+        else:
+            write_text_file(abs_go, make_go_ref_model_text(model_project_path, collisionobject_project_path))
 
     return proto
 
@@ -285,7 +296,8 @@ def export_prototype_collection(context, name: str, collection) -> str:
         if any(abs(v - 1.0) > 1e-6 for v in scale):
             raise RuntimeError(f"'{collection.name}/{part.name}': apply the scale of prototype parts (Ctrl+A > Scale).")
         part_id = export_single_prototype_assets(context, part, overwrite_go=True)
-        components.append((part_id, f"/{s.models_dir}/{part_id}.model".replace("\\", "/"), pos, quat))
+        if not is_collision_only(part):
+            components.append((part_id, f"/{s.models_dir}/{part_id}.model".replace("\\", "/"), pos, quat))
         if has_defold_collision(part):
             components.append((f"{part_id}_collision", f"/{s.collisions_dir}/{part_id}.collisionobject".replace("\\", "/"), pos, quat))
         if part_id != name:
