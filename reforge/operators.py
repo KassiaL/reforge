@@ -11,7 +11,9 @@ from .materials import ensure_material_props
 from .utils import is_object_visible, sanitize_id
 
 # Keys to clear (exporter-created)
-OBJECT_EXPORT_KEYS = ("defold_prototype", "defold_collision", "defold_collision_only", "collision_group", "collision_mask")
+OBJECT_EXPORT_KEYS = ("defold_prototype", "defold_collision", "defold_collision_only", "collision_group", "collision_mask",
+                      "jolt_collision", "jolt_motion", "jolt_layer", "jolt_mass", "jolt_density", "jolt_friction",
+                      "jolt_restitution", "jolt_convex_radius", "jolt_sensor")
 MATERIAL_EXPORT_KEYS = (
     "defold_material",
     "defold_texture",
@@ -139,6 +141,10 @@ def _set_properties_for_objects(context, objects):
             changed["msk"] += 1
         else:
             changed["msk_skip"] += 1
+
+        _set_custom_prop(obj, "jolt_collision", s.set_jolt_collision_value, s.overwrite_jolt)
+        _set_custom_prop(obj, "jolt_motion", s.set_jolt_motion_value, s.overwrite_jolt)
+        _set_custom_prop(obj, "jolt_layer", (s.set_jolt_layer_value or "").strip() or "static", s.overwrite_jolt)
 
     mats = _collect_materials_from_objects(objects)
     for m in mats:

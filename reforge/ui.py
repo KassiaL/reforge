@@ -49,6 +49,7 @@ class REFORGE_PT_panel(bpy.types.Panel):
             col.prop(s, "scenes_dir")
             col.prop(s, "textures_dir")
             col.prop(s, "collisions_dir")
+            col.prop(s, "jolt_dir")
 
         box = layout.box()
         if draw_foldout_header(box, s, "show_tools"):
@@ -57,6 +58,10 @@ class REFORGE_PT_panel(bpy.types.Panel):
             col.prop(s, "set_defold_collision_value")
             col.prop(s, "set_collision_group_value")
             col.prop(s, "set_collision_mask_value")
+            col.separator()
+            col.prop(s, "set_jolt_collision_value")
+            col.prop(s, "set_jolt_motion_value")
+            col.prop(s, "set_jolt_layer_value")
             col.separator()
             col.prop(s, "detect_duplicates")
             col.separator()
@@ -67,6 +72,8 @@ class REFORGE_PT_panel(bpy.types.Panel):
             row = col.row()
             row.prop(s, "overwrite_collision_group")
             row.prop(s, "overwrite_collision_mask")
+            row = col.row()
+            row.prop(s, "overwrite_jolt")
 
             col.separator()
             col.operator("reforge.set_selected", icon="RESTRICT_SELECT_OFF")

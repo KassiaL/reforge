@@ -24,9 +24,13 @@ from .collision import (
     make_collisionobject_text,
 )
 
+from .jolt import (
+    export_jolt_assets,
+    has_collision as has_jolt_collision,
+)
+
 from .defold_formats import (
     make_model_text_multi,
-    make_go_ref_model_text,
     make_go_components_text,
     make_collection_text_grouped_embedded,
 )
@@ -48,7 +52,9 @@ def is_collision_only(obj) -> bool:
 
 
 def has_defold_collision(obj) -> bool:
-    return bool(get_prop(obj, "defold_collision")) or is_collision_only(obj)
+    """Only the explicit property: `defold_collision_only` says the mesh has no model, not that it
+    needs a Defold collision object, and a Jolt-only project has none at all."""
+    return bool(get_prop(obj, "defold_collision"))
 
 
 def get_collision_group(obj) -> str:
@@ -148,6 +154,7 @@ def export_single_prototype_assets(context, obj, overwrite_go: bool = False) -> 
     abs_prefabs = os.path.join(project_root, s.prefabs_dir)
     abs_textures = os.path.join(project_root, s.textures_dir)
     abs_collisions = os.path.join(project_root, s.collisions_dir)
+    abs_jolt = os.path.join(project_root, s.jolt_dir)
 
     materials = iter_unique_materials_in_order(obj)
     for m in materials:
@@ -158,6 +165,7 @@ def export_single_prototype_assets(context, obj, overwrite_go: bool = False) -> 
     ensure_dir(abs_models)
     ensure_dir(abs_prefabs)
     ensure_dir(abs_collisions)
+    ensure_dir(abs_jolt)
     if s.export_textures or needs_bake:
         ensure_dir(abs_textures)
 
@@ -182,6 +190,8 @@ def export_single_prototype_assets(context, obj, overwrite_go: bool = False) -> 
     # cleanup collision generated
     safe_remove_file(os.path.join(abs_collisions, f"{proto}.convexshape"))
     safe_remove_file(os.path.join(abs_collisions, f"{proto}.collisionobject"))
+    safe_remove_file(os.path.join(abs_jolt, f"{proto}.joltshape"))
+    safe_remove_file(os.path.join(abs_jolt, f"{proto}.joltbody"))
 
     # build .model material blocks
     blocks = []
@@ -257,12 +267,29 @@ def export_single_prototype_assets(context, obj, overwrite_go: bool = False) -> 
         write_text_file(abs_colobj, make_collisionobject_text(convex_project_path, group, mask))
         collisionobject_project_path = colobj_project_path
 
+    # optional Jolt collider (geometry is taken at the origin as well)
+    joltbody_project_path = None
+    if has_jolt_collision(obj):
+        world = obj.matrix_world.copy()
+        obj.matrix_world = Matrix.Identity(4)
+        context.view_layer.update()
+        try:
+            joltbody_project_path = export_jolt_assets(obj, proto, abs_jolt, s.jolt_dir)
+        finally:
+            obj.matrix_world = world
+            context.view_layer.update()
+
     # create .go ONCE (do not overwrite to preserve manual edits like collision/logic added in Defold)
     if overwrite_go or not os.path.isfile(abs_go):
-        if collision_only:
-            write_text_file(abs_go, make_go_components_text([("collision", collisionobject_project_path, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0))]))
-        else:
-            write_text_file(abs_go, make_go_ref_model_text(model_project_path, collisionobject_project_path))
+        identity = (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
+        components = []
+        if not collision_only:
+            components.append(("model", model_project_path, identity[0], identity[1]))
+        if collisionobject_project_path:
+            components.append(("collision", collisionobject_project_path, identity[0], identity[1]))
+        if joltbody_project_path:
+            components.append(("jolt", joltbody_project_path, identity[0], identity[1]))
+        write_text_file(abs_go, make_go_components_text(components))
 
     return proto
 
@@ -300,6 +327,8 @@ def export_prototype_collection(context, name: str, collection) -> str:
             components.append((part_id, f"/{s.models_dir}/{part_id}.model".replace("\\", "/"), pos, quat))
         if has_defold_collision(part):
             components.append((f"{part_id}_collision", f"/{s.collisions_dir}/{part_id}.collisionobject".replace("\\", "/"), pos, quat))
+        if has_jolt_collision(part):
+            components.append((f"{part_id}_jolt", f"/{s.jolt_dir}/{part_id}.joltbody".replace("\\", "/"), pos, quat))
         if part_id != name:
             safe_remove_file(os.path.join(s.project_root, s.prefabs_dir, f"{part_id}.go"))
 

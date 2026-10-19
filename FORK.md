@@ -79,13 +79,32 @@ ln -s ~/defold_projects/reforge/reforge ~/.config/blender/5.2/extensions/user_de
    to the placed Empties. Nested collection instances inside a prototype are not expanded.
    Export Selected Prototype accepts a collection instance.
 4. **`defold_collision_only`** object property: the mesh is a collider shape only, no GLB /
-   `.model` is written, the `.go` (or the part's components) gets the collision object alone.
+   `.model` is written, the `.go` (or the part's components) gets the collision object alone. It
+   does not imply `defold_collision`: a Jolt-only project sets `jolt_collision` and gets no Defold
+   collision object at all.
    Used for invisible collider meshes (a cylinder for a tree trunk) and for the ground chunks of
    3d_demo: 388 chunk meshes in one prototype collection give one `ground.go` with 388
    collision components and no models.
 5. `export_single_prototype_assets(context, obj, overwrite_go=False)`; `prototype_id_of`,
    `collect_export_groups`, `export_prototype_collection` are the new entry points.
    `defold_formats.make_go_components_text` writes multi-component `.go` files.
+
+## Jolt export (fork)
+
+`reforge/jolt.py` writes the resources of the Jolt Defold extension
+(`~/defold_projects/jolt/jolt`) next to the Defold ones: `<proto>.joltshape` (the points of a hull
+or the indexed triangles of a mesh) and `<proto>.joltbody` (the component added to the prototype's
+`.go`), both protobuf text, into the `Jolt Dir` setting (`assets/jolt`).
+
+Object custom properties: `jolt_collision` (`none` / `auto` / `mesh` / `hull` / `box` / `sphere` /
+`capsule` / `cylinder`; `auto` = mesh for a static body, hull otherwise), `jolt_motion`
+(`static` / `kinematic` / `dynamic`), `jolt_layer`, `jolt_mass`, `jolt_density`, `jolt_friction`,
+`jolt_restitution`, `jolt_convex_radius`, `jolt_sensor`. `defold_collision_only` keeps its meaning
+(collider mesh, no model). The Tools box writes `jolt_collision`, `jolt_motion` and `jolt_layer`.
+
+Jolt takes concave triangle meshes on static bodies, so ground does not have to be cut into convex
+chunks the way Defold's own 3D physics required. Primitive shapes are derived from the bounding box
+of the mesh, and the scale has to be applied (`ScaledShape` does not support shear).
 
 ## Headless use
 

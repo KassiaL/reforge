@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import StringProperty, BoolProperty, PointerProperty
+from bpy.props import StringProperty, BoolProperty, EnumProperty, PointerProperty
 
 BUILTIN_DEFAULT_DEFOLD_MATERIAL = "/builtins/materials/model.material"
 
@@ -26,17 +26,43 @@ class ReforgeSettings(bpy.types.PropertyGroup):
     scenes_dir: StringProperty(name="Scenes Dir", default="assets/scenes")
     textures_dir: StringProperty(name="Textures Dir", default="assets/textures")
     collisions_dir: StringProperty(name="Collisions Dir", default="assets/collisions")
+    jolt_dir: StringProperty(name="Jolt Dir", default="assets/jolt")
 
     # Tools overwrite flags (OBJECT ONLY)
     overwrite_prototype: BoolProperty(name="Overwrite defold_prototype", default=False)
     overwrite_collision: BoolProperty(name="Overwrite defold_collision", default=False)
     overwrite_collision_group: BoolProperty(name="Overwrite collision_group", default=False)
     overwrite_collision_mask: BoolProperty(name="Overwrite collision_mask", default=False)
+    overwrite_jolt: BoolProperty(name="Overwrite jolt_*", default=False)
 
     # Tools values
     set_defold_collision_value: BoolProperty(name="Set defold_collision", default=False)
     set_collision_group_value: StringProperty(name="Collision group", default="default")
     set_collision_mask_value: StringProperty(name="Collision mask", default="default")
+    set_jolt_collision_value: EnumProperty(
+        name="Jolt collision",
+        default="none",
+        items=[
+            ("none", "None", "No Jolt collider"),
+            ("auto", "Auto", "Mesh for a static body, hull for anything that moves"),
+            ("mesh", "Mesh", "Triangle mesh, static bodies"),
+            ("hull", "Hull", "Convex hull"),
+            ("box", "Box", "Box from the bounding box"),
+            ("sphere", "Sphere", "Sphere from the bounding box"),
+            ("capsule", "Capsule", "Capsule around the Y axis"),
+            ("cylinder", "Cylinder", "Cylinder around the Y axis"),
+        ],
+    )
+    set_jolt_motion_value: EnumProperty(
+        name="Jolt motion",
+        default="static",
+        items=[
+            ("static", "Static", "Never moves"),
+            ("kinematic", "Kinematic", "Moved by the game"),
+            ("dynamic", "Dynamic", "Moved by the simulation"),
+        ],
+    )
+    set_jolt_layer_value: StringProperty(name="Jolt layer", default="static")
 
     # Duplicate detection
     detect_duplicates: BoolProperty(name="Detect duplicates (.001, .002, etc -> base name)",default=False)
